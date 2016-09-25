@@ -12,6 +12,7 @@
 # License for the specific language governing permissions and limitations under
 # the License.
 
+from zaqar.common import decorators
 from zaqar.transport.wsgi.v2_0 import claims
 from zaqar.transport.wsgi.v2_0 import flavors
 from zaqar.transport.wsgi.v2_0 import health
@@ -44,6 +45,7 @@ VERSION = {
 }
 
 
+@decorators.api_version_manager(VERSION)
 def public_endpoints(driver, conf):
     queue_controller = driver._storage.queue_controller
     message_controller = driver._storage.message_controller
@@ -100,17 +102,24 @@ def public_endpoints(driver, conf):
         ('/queues/{queue_name}/subscriptions',
          subscriptions.CollectionResource(driver._validate,
                                           subscription_controller,
-                                          defaults.subscription_ttl)),
+                                          defaults.subscription_ttl,
+                                          queue_controller,
+                                          conf)),
 
         ('/queues/{queue_name}/subscriptions/{subscription_id}',
          subscriptions.ItemResource(driver._validate,
                                     subscription_controller)),
+
+        ('/queues/{queue_name}/subscriptions/{subscription_id}/confirm',
+         subscriptions.ConfirmResource(driver._validate,
+                                       subscription_controller)),
 
         # Pre-Signed URL Endpoint
         ('/queues/{queue_name}/share', urls.Resource(driver)),
     ]
 
 
+@decorators.api_version_manager(VERSION)
 def private_endpoints(driver, conf):
 
     catalogue = [

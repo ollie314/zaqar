@@ -37,6 +37,7 @@ except ImportError:
     from email.mime import message
     Message = message.MIMEMessage
 
+from zaqar.common import consts
 from zaqar.i18n import _LI
 
 
@@ -63,10 +64,12 @@ class MessagingProtocol(websocket.WebSocketServerProtocol):
         self._auth_strategy = auth_strategy
         self._loop = loop
         self._authentified = False
+        self._auth_env = None
         self._auth_app = None
         self._auth_in_binary = None
         self._deauth_handle = None
         self.notify_in_binary = None
+        self._subscriptions = []
 
     def onConnect(self, request):
         LOG.info(_LI("Client connecting: %s"), request.peer)
@@ -102,7 +105,7 @@ class MessagingProtocol(websocket.WebSocketServerProtocol):
             resp = self._handler.create_response(400, body)
             return self._send_response(resp, isBinary)
         # Parse the request
-        req = self._handler.create_request(payload)
+        req = self._handler.create_request(payload, self._auth_env)
         # Validate and process the request
         resp = self._handler.validate_request(payload, req)
         if resp is None:
@@ -125,7 +128,7 @@ class MessagingProtocol(websocket.WebSocketServerProtocol):
                 return self._authenticate(payload, isBinary)
             else:
                 resp = self._handler.process_request(req, self)
-            if payload.get('action') == 'subscription_create':
+            if payload.get('action') == consts.SUBSCRIPTION_CREATE:
                 # NOTE(Eva-i): this will make further websocket
                 # notifications encoded in the same format as the last
                 # successful websocket subscription create request.
@@ -135,9 +138,12 @@ class MessagingProtocol(websocket.WebSocketServerProtocol):
                     # subscription.
                     if not subscriber:
                         self.notify_in_binary = isBinary
+                        self._subscriptions.append(resp)
         return self._send_response(resp, isBinary)
 
     def onClose(self, wasClean, code, reason):
+        self._handler.clean_subscriptions(self._subscriptions)
+        self.factory.unregister(self.proto_id)
         LOG.info(_LI("WebSocket connection closed: %s"), reason)
 
     def _authenticate(self, payload, in_binary):
@@ -151,6 +157,9 @@ class MessagingProtocol(websocket.WebSocketServerProtocol):
 
     def _auth_start(self, env, start_response):
         self._authentified = True
+        self._auth_env = dict(
+            (self._env_var_to_header(key), value)
+            for key, value in env.items())
         self._auth_app = None
         expire = env['keystone.token_info']['token']['expires_at']
         expire_time = timeutils.parse_isotime(expire)
@@ -165,12 +174,17 @@ class MessagingProtocol(websocket.WebSocketServerProtocol):
 
     def _deauthenticate(self):
         self._authentified = False
+        self._auth_env = None
         self.sendClose(4003, u'Authentication expired.')
 
     def _auth_response(self, status, message):
         code = int(status.split()[0])
         req = self._handler.create_request({'action': 'authenticate'})
         if code != 200:
+            # NOTE(wangxiyuan): _auth_app should be cleaned up the after the
+            # authentication failure so that the client can be authenticated
+            # again.
+            self._auth_app = None
             body = {'error': 'Authentication failed.'}
             resp = self._handler.create_response(code, body, req)
             self._send_response(resp, self._auth_in_binary)
@@ -181,6 +195,12 @@ class MessagingProtocol(websocket.WebSocketServerProtocol):
 
     def _header_to_env_var(self, key):
         return 'HTTP_%s' % key.replace('-', '_').upper()
+
+    def _env_var_to_header(self, key):
+        if key.startswith("HTTP_"):
+            return key[5:].replace("_", "-")
+        else:
+            return key
 
     def _send_response(self, resp, in_binary):
         if in_binary:

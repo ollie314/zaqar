@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from distutils.version import LooseVersion
+from distutils import version as d_version
 from wsgiref import simple_server
 
 import falcon
-import netaddr
 from oslo_config import cfg
 from oslo_log import log as logging
+from oslo_utils import netutils
 import six
 import socket
 
@@ -121,7 +121,8 @@ class Driver(transport.DriverBase):
         # middleware instead of it, but for the compatibility with old version,
         # we support them both now. Hook way can be removed after falcon
         # version must be bigger than 1.0.0 in requirements.
-        if LooseVersion(falcon.__version__) >= LooseVersion("1.0.0"):
+        if (d_version.LooseVersion(falcon.__version__) >=
+                d_version.LooseVersion("1.0.0")):
             middleware = [FuncMiddleware(hook) for hook in self.before_hooks]
             self.app = falcon.API(middleware=middleware)
         else:
@@ -130,8 +131,9 @@ class Driver(transport.DriverBase):
         self.app.add_error_handler(Exception, self._error_handler)
 
         for version_path, endpoints in catalog:
-            for route, resource in endpoints:
-                self.app.add_route(version_path + route, resource)
+            if endpoints:
+                for route, resource in endpoints:
+                    self.app.add_route(version_path + route, resource)
 
     def _init_middleware(self):
         """Initialize WSGI middlewarez."""
@@ -160,7 +162,7 @@ class Driver(transport.DriverBase):
         :param host: The listen host for the zaqar API server.
         """
         server_cls = simple_server.WSGIServer
-        if netaddr.valid_ipv6(host):
+        if netutils.is_valid_ipv6(host):
             if getattr(server_cls, 'address_family') == socket.AF_INET:
                 class server_cls(server_cls):
                     address_family = socket.AF_INET6

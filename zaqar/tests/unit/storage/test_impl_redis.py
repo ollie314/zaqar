@@ -179,7 +179,7 @@ class RedisDriverTest(testing.TestBase):
                                          driver.ControlDriver
                                          (self.conf, cache))
 
-        self.assertTrue(isinstance(redis_driver.connection, redis.StrictRedis))
+        self.assertIsInstance(redis_driver.connection, redis.StrictRedis)
 
     def test_version_match(self):
         oslo_cache.register_config(self.conf)
@@ -399,6 +399,38 @@ class RedisClaimsTest(base.ClaimControllerTest):
         self.assertRaises(storage.errors.ClaimDoesNotExist,
                           self.controller.update, queue_name,
                           claim_id, {}, project=None)
+
+        # create a claim and then delete the queue
+        claim_id, messages = self.controller.create(queue_name, {'ttl': 100,
+                                                    'grace': 0},
+                                                    project=None)
+        self.queue_controller.delete(queue_name)
+
+        self.assertRaises(storage.errors.ClaimDoesNotExist,
+                          self.controller.get, queue_name,
+                          claim_id, project=None)
+
+        self.assertRaises(storage.errors.ClaimDoesNotExist,
+                          self.controller.update, queue_name,
+                          claim_id, {}, project=None)
+
+    def test_get_claim_after_expires(self):
+        queue_name = 'no-such-claim'
+        self.queue_controller.create(queue_name, project='fake_project')
+        new_messages = [{'ttl': 60, 'body': {}},
+                        {'ttl': 60, 'body': {}},
+                        {'ttl': 60, 'body': {}}]
+        self.message_controller.post(queue_name, new_messages,
+                                     client_uuid=str(uuid.uuid1()),
+                                     project='fake_project')
+        claim_id, messages = self.controller.create(queue_name, {'ttl': 1,
+                                                    'grace': 0},
+                                                    project='fake_project')
+        # Lets let it expire
+        time.sleep(2)
+        self.assertRaises(storage.errors.ClaimDoesNotExist,
+                          self.controller.get, queue_name,
+                          claim_id, project='fake_project')
 
     def test_gc(self):
         self.queue_controller.create(self.queue_name)

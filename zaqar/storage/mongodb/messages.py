@@ -645,7 +645,7 @@ class MessageController(storage.Message):
             for index, message in enumerate(messages)
         ]
 
-        ids = collection.insert(prepared_messages)
+        ids = collection.insert(prepared_messages, check_keys=False)
 
         return [str(id_) for id_ in ids]
 
@@ -667,7 +667,7 @@ class MessageController(storage.Message):
 
         cid = utils.to_oid(claim)
         if cid is None:
-            raise errors.ClaimDoesNotExist(queue_name, project, claim)
+            raise errors.ClaimDoesNotExist(claim, queue_name, project)
 
         now = timeutils.utcnow_ts()
         cursor = collection.find(query).hint(ID_INDEX_FIELDS)
@@ -838,7 +838,7 @@ class FIFOMessageController(MessageController):
         # before the operation is abandoned is 49.95 seconds.
         for attempt in self._retry_range:
             try:
-                ids = collection.insert(prepared_messages)
+                ids = collection.insert(prepared_messages, check_keys=False)
 
                 # Log a message if we retried, for debugging perf issues
                 if attempt != 0:
@@ -986,19 +986,6 @@ def _basic_message(msg, now):
         'body': msg['b'],
         'claim_id': str(msg['c']['id']) if msg['c']['id'] else None
     }
-
-
-# NOTE(kgriffs): E.g.: 'queuecontroller:exists:5083853/my-queue'
-_QUEUE_CACHE_PREFIX = 'queuecontroller:'
-
-_QUEUE_CACHE_TTL = 5
-
-
-def _queue_exists_key(queue, project=None):
-    # NOTE(kgriffs): Use string concatenation for performance,
-    # also put project first since it is guaranteed to be
-    # unique, which should reduce lookup time.
-    return _QUEUE_CACHE_PREFIX + 'exists:' + str(project) + '/' + queue
 
 
 class MessageQueueHandler(object):

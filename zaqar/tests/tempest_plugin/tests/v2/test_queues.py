@@ -16,13 +16,13 @@
 
 from six import moves
 from tempest.common.utils import data_utils
-from tempest_lib import decorators
+from tempest.lib import decorators
 from testtools import matchers
 
 from zaqar.tests.tempest_plugin.tests import base
 
 
-class TestQueues(base.BaseV11MessagingTest):
+class TestQueues(base.BaseV2MessagingTest):
 
     @decorators.idempotent_id('f2db96f3-fa02-426a-9b42-5806e12f14d4')
     def test_create_delete_queue(self):

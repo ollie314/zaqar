@@ -14,8 +14,8 @@
 # limitations under the License.
 
 from tempest import config
+from tempest.lib.common.utils import data_utils
 from tempest import test
-from tempest_lib.common.utils import data_utils
 
 from zaqar.tests.tempest_plugin.services.messaging.json import messaging_client
 
@@ -197,8 +197,8 @@ class BaseV11MessagingTest(BaseMessagingTest):
         return rbody
 
 
-class BaseV2MessagingTest(BaseV11MessagingTest):
-    """Base class for the Messaging (Zaqar) v1.1 tests."""
+class BaseV2MessagingTest(BaseMessagingTest):
+    """Base class for the Messaging (Zaqar) v2 tests."""
     @classmethod
     def setup_clients(cls):
         super(BaseV2MessagingTest, cls).setup_clients()
@@ -250,4 +250,19 @@ class BaseV2MessagingTest(BaseV11MessagingTest):
                        'mailto:fake@123.com']
         rbody = [{'options': option_body, 'ttl': message_ttl,
                   'subscriber': subscriber} for subscriber in subscribers]
+        return rbody
+
+    @classmethod
+    def generate_message_body(cls, repeat=1):
+        """Wrapper utility that sets the metadata of a queue."""
+        message_ttl = data_utils.\
+            rand_int_id(start=60, end=CONF.messaging.max_message_ttl)
+
+        key = data_utils.arbitrary_string(size=20, base_text='MessagingKey')
+        value = data_utils.arbitrary_string(size=20,
+                                            base_text='MessagingValue')
+        message_body = {key: value}
+
+        body = ([{'body': message_body, 'ttl': message_ttl}] * repeat)
+        rbody = {'messages': body}
         return rbody

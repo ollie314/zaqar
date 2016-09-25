@@ -48,12 +48,12 @@ class SubscriptionController(base.Subscription):
       'e': expires: datetime.datetime
       'o': options :: dict
       'p': project :: six.text_type
+      'c': confirmed :: boolean
     """
 
     def __init__(self, *args, **kwargs):
         super(SubscriptionController, self).__init__(*args, **kwargs)
         self._collection = self.driver.subscriptions_database.subscriptions
-        self._queue_ctrl = self.driver.queue_controller
         self._collection.ensure_index(SUBSCRIPTIONS_INDEX, unique=True)
         # NOTE(flwang): MongoDB will automatically delete the subscription
         # from the subscriptions collection when the subscription's 'e' value
@@ -71,23 +71,18 @@ class SubscriptionController(base.Subscription):
         if marker is not None:
             query['_id'] = {'$gt': utils.to_oid(marker)}
 
-        projection = {'s': 1, 'u': 1, 't': 1, 'p': 1, 'o': 1, '_id': 1}
+        projection = {'s': 1, 'u': 1, 't': 1, 'p': 1, 'o': 1, '_id': 1, 'c': 1}
 
         cursor = self._collection.find(query, projection=projection)
         cursor = cursor.limit(limit).sort('_id')
         marker_name = {}
 
+        now = timeutils.utcnow_ts()
+
         def normalizer(record):
-            ret = {
-                'id': str(record['_id']),
-                'source': record['s'],
-                'subscriber': record['u'],
-                'ttl': record['t'],
-                'options': record['o'],
-            }
             marker_name['next'] = record['_id']
 
-            return ret
+            return _basic_subscription(record, now)
 
         yield utils.HookedCursor(cursor, normalizer)
         yield marker_name and marker_name['next']
@@ -100,7 +95,8 @@ class SubscriptionController(base.Subscription):
         if not res:
             raise errors.SubscriptionDoesNotExist(subscription_id)
 
-        return _normalize(res)
+        now = timeutils.utcnow_ts()
+        return _basic_subscription(res, now)
 
     @utils.raises_conn_error
     def create(self, queue, subscriber, ttl, options, project=None):
@@ -108,16 +104,16 @@ class SubscriptionController(base.Subscription):
         now = timeutils.utcnow_ts()
         now_dt = datetime.datetime.utcfromtimestamp(now)
         expires = now_dt + datetime.timedelta(seconds=ttl)
+        confirmed = False
 
-        if not self._queue_ctrl.exists(source, project):
-            raise errors.QueueDoesNotExist(source, project)
         try:
             subscription_id = self._collection.insert({'s': source,
                                                        'u': subscriber,
                                                        't': ttl,
                                                        'e': expires,
                                                        'o': options,
-                                                       'p': project})
+                                                       'p': project,
+                                                       'c': confirmed})
             return subscription_id
         except pymongo.errors.DuplicateKeyError:
             return None
@@ -160,14 +156,37 @@ class SubscriptionController(base.Subscription):
         self._collection.remove({'_id': utils.to_oid(subscription_id),
                                  'p': project}, w=0)
 
+    @utils.raises_conn_error
+    def get_with_subscriber(self, queue, subscriber, project=None):
+        res = self._collection.find_one({'u': subscriber,
+                                         'p': project})
+        now = timeutils.utcnow_ts()
+        return _basic_subscription(res, now)
 
-def _normalize(record):
-    ret = {
-        'id': str(record['_id']),
+    @utils.raises_conn_error
+    def confirm(self, queue, subscription_id, project=None, confirm=True):
+
+        res = self._collection.update({'_id': utils.to_oid(subscription_id),
+                                       'p': project}, {'$set': {'c': confirm}},
+                                      upsert=False)
+        if not res['updatedExisting']:
+            raise errors.SubscriptionDoesNotExist(subscription_id)
+
+
+def _basic_subscription(record, now):
+    # NOTE(Eva-i): unused here record's field 'e' (expires) has changed it's
+    # format from int (timestamp) to datetime since patch
+    # 1d122b1671792aff0055ed5396111cd441fb8269. Any future change about
+    # starting using 'e' field should make sure support both of the formats.
+    oid = record['_id']
+    age = now - utils.oid_ts(oid)
+    confirmed = record.get('c', True)
+    return {
+        'id': str(oid),
         'source': record['s'],
         'subscriber': record['u'],
         'ttl': record['t'],
-        'options': record['o']
+        'age': int(age),
+        'options': record['o'],
+        'confirmed': confirmed,
     }
-
-    return ret

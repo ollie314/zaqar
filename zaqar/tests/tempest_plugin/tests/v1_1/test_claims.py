@@ -15,8 +15,8 @@
 
 from six.moves.urllib import parse as urlparse
 from tempest import config
-from tempest_lib.common.utils import data_utils
-from tempest_lib import decorators
+from tempest.lib.common.utils import data_utils
+from tempest.lib import decorators
 
 from zaqar.tests.tempest_plugin.tests import base
 
@@ -89,7 +89,7 @@ class TestClaims(base.BaseV11MessagingTest):
         # Verify claim ttl >= updated ttl value
         _, body = self.client.query_claim(claim_uri)
         updated_claim_ttl = body["ttl"]
-        self.assertTrue(updated_claim_ttl >= claim_ttl)
+        self.assertGreaterEqual(updated_claim_ttl, claim_ttl)
 
         # Delete Claimed message
         self.client.delete_messages(claimed_message_uri)

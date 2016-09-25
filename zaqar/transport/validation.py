@@ -75,7 +75,8 @@ _TRANSPORT_LIMITS_OPTIONS = (
                deprecated_group='limits:transport',
                help='Defines the maximum message grace period in seconds.'),
 
-    cfg.ListOpt('subscriber_types', default=['http', 'https', 'mailto'],
+    cfg.ListOpt('subscriber_types', default=['http', 'https', 'mailto',
+                                             'trust+http', 'trust+https'],
                 help='Defines supported subscriber types.'),
 )
 
@@ -538,6 +539,12 @@ class Validator(object):
                 now_dt + datetime.timedelta(seconds=ttl)
             except OverflowError:
                 raise ValidationFailed(msg, datetime.datetime.max)
+
+    def subscription_confirming(self, confirm):
+        confirm = confirm.get('confirmed', None)
+        if not isinstance(confirm, bool):
+            msg = _(u"The 'confirmed' should be boolean.")
+            raise ValidationFailed(msg)
 
     def subscription_listing(self, limit=None, **kwargs):
         """Restrictions involving a list of subscriptions.

@@ -17,6 +17,7 @@ from zaqar.api.v2 import request as schema_validator
 
 from zaqar.common.api import request
 from zaqar.common.api import response
+from zaqar.common import consts
 from zaqar.common import errors
 from zaqar.common import urls
 
@@ -28,12 +29,12 @@ class Handler(object):
     """
 
     _actions_mapping = {
-        'message_list': 'GET',
-        'message_get': 'GET',
-        'message_get_many': 'GET',
-        'message_post': 'POST',
-        'message_delete': 'DELETE',
-        'message_delete_many': 'DELETE'
+        consts.MESSAGE_LIST: 'GET',
+        consts.MESSAGE_GET: 'GET',
+        consts.MESSAGE_GET_MANY: 'GET',
+        consts.MESSAGE_POST: 'POST',
+        consts.MESSAGE_DELETE: 'DELETE',
+        consts.MESSAGE_DELETE_MANY: 'DELETE'
     }
 
     def __init__(self, storage, control, validate, defaults):
@@ -44,9 +45,17 @@ class Handler(object):
     def set_subscription_factory(self, factory):
         self._subscription_factory = factory
 
+    def clean_subscriptions(self, subscriptions):
+        for resp in subscriptions:
+            body = {'queue_name': resp._request._body.get('queue_name'),
+                    'subscription_id': resp._body.get('subscription_id')}
+            payload = {'body': body, 'headers': resp._request._headers}
+            req = self.create_request(payload)
+            self.v2_endpoints.subscription_delete(req)
+
     def process_request(self, req, protocol):
         # FIXME(vkmc): Control API version
-        if req._action == 'subscription_create':
+        if req._action == consts.SUBSCRIPTION_CREATE:
             subscriber = req._body.get('subscriber')
             if not subscriber:
                 # Default to the connected websocket as subscriber
@@ -83,7 +92,7 @@ class Handler(object):
         return response.Response(req, body, headers)
 
     @staticmethod
-    def create_request(payload=None):
+    def create_request(payload=None, env=None):
         if payload is None:
             payload = {}
         action = payload.get('action')
@@ -91,7 +100,7 @@ class Handler(object):
         headers = payload.get('headers')
 
         return request.Request(action=action, body=body,
-                               headers=headers, api="v2")
+                               headers=headers, api="v2", env=env)
 
     def get_defaults(self):
         return self.v2_endpoints._defaults

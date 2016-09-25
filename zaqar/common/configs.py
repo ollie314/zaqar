@@ -31,6 +31,10 @@ _GENERAL_OPTIONS = (
                 deprecated_opts=[cfg.DeprecatedOpt('sharding')]),
     cfg.BoolOpt('unreliable', default=False,
                 help='Disable all reliability constraints.'),
+    cfg.ListOpt('enable_deprecated_api_versions', default=[],
+                item_type=cfg.types.List(item_type=cfg.types.String(
+                    choices=('1', '1.1'))),
+                help='List of deprecated API versions to enable.'),
 )
 
 _DRIVER_OPTIONS = (
@@ -47,7 +51,7 @@ _DRIVER_GROUP = 'drivers'
 
 
 _SIGNED_URL_OPTIONS = (
-    cfg.StrOpt('secret_key', default=None,
+    cfg.StrOpt('secret_key',
                help=('Secret key used to encrypt pre-signed URLs.')),
 )
 
@@ -58,6 +62,11 @@ _NOTIFICATION_OPTIONS = (
     cfg.StrOpt('smtp_command', default='/usr/sbin/sendmail -t -oi',
                help=('The command of smtp to send email. The format is '
                      '"command_name arg1 arg2".')),
+    cfg.IntOpt('max_notifier_workers', default=10,
+               help='The max amount of the notification workers.'),
+    cfg.BoolOpt('require_confirmation', default=False,
+                help='Whether the http/https/email subscription need to be '
+                     'confirmed before notification.'),
 )
 
 _NOTIFICATION_GROUP = 'notification'

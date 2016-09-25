@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from oslo_config import cfg
 from oslo_log import log
 from stevedore import driver
 
 from zaqar.api import handler
 from zaqar.common import cache as oslo_cache
 from zaqar.common import configs
+from zaqar.common import consts
 from zaqar.common import decorators
 from zaqar.common import errors
 from zaqar.storage import pipeline
@@ -31,19 +31,6 @@ from zaqar.transport import validation
 from zaqar.i18n import _LE
 
 LOG = log.getLogger(__name__)
-
-
-_CLI_OPTIONS = (
-    configs._ADMIN_MODE_OPT,
-    cfg.BoolOpt('daemon', default=False,
-                help='Run Zaqar server in the background.'),
-)
-
-# NOTE (Obulpathi): Register daemon command line option for
-# zaqar-server
-CONF = cfg.CONF
-CONF.register_cli_opts(_CLI_OPTIONS)
-log.register_options(CONF)
 
 
 class Bootstrap(object):
@@ -60,8 +47,6 @@ class Bootstrap(object):
             self.conf.register_opts(opts, group=group)
 
         self.driver_conf = self.conf[configs._DRIVER_GROUP]
-
-        log.setup(conf, 'zaqar')
 
     @decorators.lazy_property(write=False)
     def api(self):
@@ -106,8 +91,7 @@ class Bootstrap(object):
         transport_name = self.driver_conf.transport
         LOG.debug(u'Loading transport driver: %s', transport_name)
 
-        # FIXME(vkmc): Find a better way to init args
-        if transport_name == 'websocket':
+        if transport_name == consts.TRANSPORT_WEBSOCKET:
             args = [self.conf, self.api, self.cache]
         else:
             args = [
